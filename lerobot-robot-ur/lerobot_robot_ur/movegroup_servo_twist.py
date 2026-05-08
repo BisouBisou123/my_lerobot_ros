@@ -73,11 +73,12 @@ class Movegroup2ServoTwist:
         if not self._cmd_type_srv.wait_for_service(timeout_sec=wait_for_server_timeout_sec):
             logger.warning("Command type service not available.")
             return False
-        result = self._pause_srv.call(self._enable_req)
-        if not result or not result.success:
-            logger.error(f"Enable failed: {getattr(result, 'message', '')}")
-            self._enabled = False
-            return False
+        if 0:
+            result = self._pause_srv.call(self._enable_req)
+            if not result or not result.success:
+                logger.error(f"Enable failed: {getattr(result, 'message', '')}")
+                self._enabled = False
+                return False
         cmd_result = self._cmd_type_srv.call(self._twist_type_req)
         if not cmd_result or not cmd_result.success:
             logger.error("Switch to TWIST command type failed.")
@@ -96,8 +97,21 @@ class Movegroup2ServoTwist:
         return bool(result and result.success)
 
     def send_action(self, action: dict[str, Any], dummy) -> dict[str, Any]:
-        linear = action.get("linear", (0.0, 0.0, 0.0))
-        angular = action.get("angular", (0.0, 0.0, 0.0))
+
+        linear = (
+            float(action.get("linear_x.vel", 0.0)),
+            float(action.get("linear_y.vel", 0.0)),
+            float(action.get("linear_z.vel", 0.0)),
+        )
+
+
+        angular = (
+            float(action.get("angular_x.vel", 0.0)),
+            float(action.get("angular_y.vel", 0.0)),
+            float(action.get("angular_z.vel", 0.0)),
+        )
+
+        #print(f"Received action: linear={linear}, angular={angular}")
         self.twist(linear=linear, angular=angular)
         return {}
 

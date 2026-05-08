@@ -102,9 +102,9 @@ class UrROS2InterfaceConfig(ROS2InterfaceConfig):
     #action_type: ActionType = ActionType.CARTESIAN_VELOCITY # Not implemted
     #action_type: ActionType = ActionType.JOINT_POSITION # Tested: Oke, maar haperend
     #action_type: ActionType = ActionType.MOVEGROUP_FOLLOW_JOINT_TRAJECTION # Tested: Oke
-    #action_type: ActionType = ActionType.MOVEGROUP_SERVO_TWIST # Not Tested
+    action_type: ActionType = ActionType.MOVEGROUP_SERVO_TWIST # Not Tested
     #action_type: ActionType = ActionType.MOVEGROUP_SERVO_POSE # Not Tested
-    action_type: ActionType = ActionType.MOVEGROUP_SERVO_JOG # Not Tested
+    #action_type: ActionType = ActionType.MOVEGROUP_SERVO_JOG # Not Tested
 
 
 

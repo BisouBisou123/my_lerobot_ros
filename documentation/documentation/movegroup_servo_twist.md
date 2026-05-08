@@ -6,7 +6,9 @@ Selecteer in de `class UrROS2InterfaceConfig(ROS2InterfaceConfig)` in het `confi
 
 ## Real Robot
 ### Start Teleopertor
-**Not implemented yet*
+**Niet nodig*
+Maak gebruik van een fysieke controller zoals een gamepad of joystick.
+Verbind de fysieke controller met de computer(via bv. Bluetooth) en start de teleoperator zoals hieronder beschreven. De teleoperator zal automatisch verbinding maken met de controller.
 
 ### Start UR Robot
 ```bash
@@ -20,7 +22,7 @@ ros2 launch my_ur_bringup move_group.launch.py launch_servo:=true
 ```bash
 lerobot-teleoperate \
   --robot.type=lerobot_robot_ur \
-  --teleop.type=lerobot_teleoperator_twist \
+  --teleop.type=gamepad_6dof \
   --fps=15
 ```
 :::{note}
@@ -33,7 +35,9 @@ source .venv/bin/activate
 
 ## Simulation
 ### Start Teleopertor
-**Not implemented yet*
+**Niet nodig*
+Maak gebruik van een fysieke controller zoals een gamepad of joystick.
+Verbind de fysieke controller met de computer(via bv. Bluetooth) en start de teleoperator zoals hieronder beschreven. De teleoperator zal automatisch verbinding maken met de controller.
 
 ### Start UR Robot
 ```bash
@@ -44,7 +48,7 @@ ros2 launch my_ur_bringup simulation.launch.py initial_joint_controller:=forward
 ```bash
 lerobot-teleoperate \
   --robot.type=lerobot_robot_ur \
-  --teleop.type=keyboard_joint  \
+  --teleop.type=gamepad_6dof  \
   --fps=15
 ```
 :::{note}
