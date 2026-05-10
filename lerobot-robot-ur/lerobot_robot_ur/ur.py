@@ -9,8 +9,9 @@ from lerobot.robots.robot import Robot
 from lerobot.robots.utils import ensure_safe_goal_position
 
 
-from .config_ur import UrConfig
 from .config_ur import ActionType
+from .config_ur import CustomConfig
+from .config_ur import UrConfig
 from .ros_interface_ur import ROS2Interface
 
 
@@ -242,3 +243,9 @@ class Ur(Robot):
     @is_connected.setter
     def is_connected(self, value: bool) -> None:
         self._is_connected = value
+
+# class implementing the same interface as Ur, but with a custom config that allows overriding the action type and other parameters.
+class Custom(Ur):
+
+    config_class = CustomConfig
+    name = "custom"
