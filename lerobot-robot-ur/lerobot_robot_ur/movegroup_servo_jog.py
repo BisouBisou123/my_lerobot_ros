@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 . team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
 import logging
 
 from control_msgs.msg import JointJog
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState 
+from std_msgs.msg import Float64
 from moveit_msgs.srv import ServoCommandType
 import rclpy
 from rclpy import qos
@@ -24,6 +25,8 @@ from rclpy.node import Node
 from std_srvs.srv import SetBool
 from .config_ur import UrConfig
 from typing import Any
+from control_msgs.action import ParallelGripperCommand
+from rclpy.action import ActionClient
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,7 @@ class Movegroup2ServoJog:
         self._enabled = False   
         self._callback_group = callback_group
         self._jog_pub = None
+        self._jog_pub_gripper = None
 
     def connect(self) -> None:
         self._jog_pub = self._node.create_publisher(
@@ -57,6 +61,19 @@ class Movegroup2ServoJog:
             ),
             callback_group=self._callback_group,
         )
+
+        #action server hier van de gripper
+        self._jog_pub_gripper = self._node.create_publisher(
+            Float64,
+            "/robotiq_gripper_controller/set_joint_state",
+            qos.QoSProfile(
+                durability=qos.QoSDurabilityPolicy.VOLATILE,
+                reliability=qos.QoSReliabilityPolicy.RELIABLE,
+                history=qos.QoSHistoryPolicy.KEEP_ALL,
+            ),
+            callback_group=self._callback_group,
+        )
+
         self._pause_srv = self._node.create_client(
             SetBool, self.config.ros2_interface.servo_pause, callback_group=self._callback_group
         )
@@ -68,6 +85,9 @@ class Movegroup2ServoJog:
         self._disable_req = SetBool.Request(data=True)
         self._jog_type_req = ServoCommandType.Request(command_type=ServoCommandType.Request.JOINT_JOG)
         self.previous_time = self._node.get_clock().now()
+
+    
+
 
     def enable(self, wait_for_server_timeout_sec=1.0) -> bool:
         if not self._pause_srv.wait_for_service(timeout_sec=wait_for_server_timeout_sec):
@@ -101,19 +121,20 @@ class Movegroup2ServoJog:
     def send_action(self, action: dict[str, Any], last_joint_state: dict[str, dict[str, float]] | None) -> dict[str, Any]:
         """ calcualte differences between current joint state and target joint state, then send as a jog command  """
         """ calculate velocities for each joint based on the difference and a gain factor, then send as a jog command  """
-        #print("Received action:", action)
-        #print("Current joint state:", last_joint_state)
+        # print("Received action:", action)
+        # print("Current joint state:", last_joint_state)
         time = self._node.get_clock().now()
         dt = (time - self.previous_time).nanoseconds / 1e9
         if dt <= 0.0:
-            logger.warning("Non-positive time difference between commands, skipping jog command.")
-            return {}
+            logger.warning("Non-positive time difference between commands, skipping jog command.")            
         joint_positions = action.get("joint_positions")
         if joint_positions is None:
             raise ValueError("Action must contain 'joint_positions' key.")
         if not last_joint_state or "position" not in last_joint_state:
             logger.warning("Joint state not available yet, skipping jog command.")
             return {}
+
+
 
         current_positions = [
             float(last_joint_state["position"].get(joint_name, 0.0))
@@ -131,9 +152,25 @@ class Movegroup2ServoJog:
         #print("Calculated velocities:", velocities)             
         self.jog(displacements, velocities, dt, enable_if_disabled=True)
 
-        self.previous_time = time
+        # Send gripper command (controller expects scale defined in config)
+        gripper_val = None
+        if "gripper" in action:
+            gripper_val = float(action["gripper"])  # expected in controller units or teachbot meters
+        elif last_joint_state and "gripper" in last_joint_state:
+            gripper_val = float(last_joint_state["gripper"])  # teachbot reports meters (0.0 closed -> 0.085 open) gaat niet meer helemaal dicht
 
+        if gripper_val is not None and self._jog_pub_gripper is not None:
+            # Controller expects meters: 0.0 closed -> 0.085 open
+            controller_val = max(0.0, min(0.085, gripper_val))
+            gripper_msg = Float64()
+            gripper_msg.data = float(controller_val)
+            self._jog_pub_gripper.publish(gripper_msg)
+      
+
+        self.previous_time = time
         return {}
+
+        
 
     def jog(self, displacements, velocities, duration, enable_if_disabled=True):
         if enable_if_disabled and not self._enabled:
@@ -147,6 +184,8 @@ class Movegroup2ServoJog:
         self._jog_msg.duration = duration 
         #print("Publishing JointJog message:", self._jog_msg)
         self._jog_pub.publish(self._jog_msg)
+        #self._jog_pub_gripper.publish(self.Float64(data=displacements[0])) 
+
 
     def destroy(self) -> None:
         pub = getattr(self, "_jog_pub", None)
@@ -160,3 +199,6 @@ class Movegroup2ServoJog:
             logger.debug(f"Ignoring publisher destroy error during shutdown: {err}")
         finally:
             self._jog_pub = None
+
+            ####### JOG VOOR GRIPPER
+            # self._jog_grip_oub = None

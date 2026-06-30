@@ -18,7 +18,7 @@ class TeachbotConfig(TeleoperatorConfig):
         "wrist_2_joint",
         "wrist_3_joint"
     ])
-    gripper_joint_name: str = "gripper_joint"  # Update if you have a gripper joint name
+    gripper_joint_name: str = "robotiq_85_left_knuckle_joint"  # Update if you have a gripper joint name
     target_joint_names: list[str] = field(default_factory=lambda: [
         "shoulder_pan_joint",
         "shoulder_lift_joint",

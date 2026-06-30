@@ -1,8 +1,11 @@
 import logging
+from pyexpat import features
 from typing import Any
 import time
+import numpy as np
 
 
+from control_msgs import action
 from lerobot.cameras import make_cameras_from_configs
 from lerobot.utils.errors import DeviceNotConnectedError, DeviceAlreadyConnectedError
 from lerobot.robots.robot import Robot
@@ -13,6 +16,7 @@ from .config_ur import ActionType
 from .config_ur import CustomConfig
 from .config_ur import UrConfig
 from .ros_interface_ur import ROS2Interface
+
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +34,17 @@ class Ur(Robot):
         self.cameras = make_cameras_from_configs(config.cameras)
         self.is_connected = False
 
+        
+
     def connect(self, calibrate: bool = True) -> None:
+## print toegevoegd        
+        # print("=== ACTION FEATURES ===")
+        # print(self.action_features)
+        # print("=== OBSERVATION FEATURES ===")
+        # print(self.observation_features)
+
+        # self.is_connected = True
+
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
         for cam in self.cameras.values():
@@ -38,6 +52,8 @@ class Ur(Robot):
         self.ros2_interface.connect()
         self.is_connected = True
         #logger.info(f"{self} connected.")
+
+    
 
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
@@ -56,7 +72,18 @@ class Ur(Robot):
         Returns:
             dict[str, float]: The action sent to the motors, potentially clipped.
         """
-        #print(f"Received action: {action}" )
+## print toegevoegd
+        # print("ACTION:", action)
+        ## gripper test
+        # if "gripper" in action:
+        #     print("GRIPPER =", action["gripper"])
+        # if "gripper_joint" in action:
+        #     print("GRIPPER_JOINT =", action["gripper_joint"]) 
+
+        # print("RAW ACTION:", action)
+        # print("RAW ACTION KEYS:", list(action.keys()))
+        # print(f"Received action: {action}" )
+        
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
@@ -76,47 +103,98 @@ class Ur(Robot):
                         teleop_joint = k
                         break
                 # Try both .pos and plain key
-                teleop_val = action.get(f"{teleop_joint}.pos", action.get(teleop_joint, 0.0)) if teleop_joint else 0.0
+
+## .pos weg na action.get({xxx}
+                teleop_val = action.get(f"{teleop_joint}", action.get(teleop_joint, 0.0)) if teleop_joint else 0.0
                 offset_deg = offsets.get(arm_joint, 0.0)
                 offset = offset_deg * 3.141592653589793 / 180.0  # convert degrees to radians
                 scale = scales.get(arm_joint, 1.0)
                 arm_val = (teleop_val + offset) * scale
                 joint_positions.append(arm_val)
             #print(f"Mapped joint positions: {joint_positions}")
-            self.ros2_interface.send_action({"joint_positions": joint_positions})
+            # Prepare action dict with joint positions and gripper
+            ros_action = {"joint_positions": joint_positions}
+
+
+##########gripper toevoegen  aan dictonary
+## gripper ook laten bewegen tijdens replay!!
+            gripper_val = action.get(
+                "gripper_joint",
+                action.get("gripper", None)
+            )
+            if gripper_val is not None:
+                ros_action["gripper"] = float(gripper_val)
+## orgineel
+            # Extract and add gripper command if present
+            # gripper_val = action.get("gripper", None)
+            # if gripper_val is not None:
+                # ros_action["gripper"] = gripper_val #was gripper_joint maar daarmee werkt de gripper niet meer in teachbot 
+
+## print toegevoegd
+            # print(f"Including gripper in action: {gripper_val}")
+            # print("joint_positions:", joint_positions)                     
+            # print("RAW ACTION:", action)
+            # print("JOINT POSITIONS:", joint_positions)
+            # print("ROS ACTION:", ros_action)
+
+
+            self.ros2_interface.send_action(ros_action)
         elif self.config.ros2_interface.action_type == ActionType.MOVEGROUP_SERVO_TWIST:
             self.ros2_interface.send_action(action)
         elif self.config.ros2_interface.action_type == ActionType.MOVEGROUP_SERVO_POSE:
             pass
         else:
             raise ValueError(f"Unsupported action type: {self.config.ros2_interface.action_type}")
+####
+        # gripper_pos = action["gripper"] ##.pos weg
+        # self.ros2_interface.send_gripper_command(gripper_pos)
 
-        #gripper_pos = action["gripper.pos"]
-        #self.ros2_interface.send_gripper_command(gripper_pos)
-
-        # Ensure all required action keys are present for dataset writing
-        required_keys = [f"{joint}.pos" for joint in self.config.ros2_interface.arm_joint_names]
-        # Optionally add gripper
+        # # Ensure all required action keys are present for dataset writing
+        required_keys = [f"{joint}" for joint in self.config.ros2_interface.arm_joint_names]
+        # # Optionally add gripper
+####
         if hasattr(self.config.ros2_interface, "gripper_joint_name"):
-            required_keys.append(f"{self.config.ros2_interface.gripper_joint_name}.pos")
+            required_keys.append(f"{self.config.ros2_interface.gripper_joint_name}")
 
+## De fix (helpt heel erg) maar is beetje dom
+        if "gripper" in action and "gripper_joint" not in action:
+            action["gripper_joint"] = action["gripper"]
+##
+
+## Wanneer geen action bepaald kan worden wordt deze joint hierdoor op 0 gezet
         for key in required_keys:
             if key not in action:
                 action[key] = 0.0
-        #print(f"Final action sent: {action}")
+        # print(f"Final action sent: {action}")
+
+## prints toegevoegd        
+        # print("ACTION WRITTEN TO DATASET:")
+        # print(action)
+        # print(
+        #     "gripper =", action.get("gripper"),
+        #     "gripper_joint =", action.get("gripper_joint")
+        # )
         return action
 
 
     def get_observation(self) -> dict[str, Any]:
+## print toegevoegd        
+        # print("GET_OBSERVATION CALLED")
+        
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         obs_dict: dict[str, Any] = {}
+        
         joint_state = self.ros2_interface.joint_state
+
         if joint_state is None or "position" not in joint_state:
             logger.warning("Joint state 'position' not available yet.")
         else:
-            obs_dict.update({f"{joint}.pos": pos for joint, pos in joint_state["position"].items()})
+            # print("joint_state:", self.ros2_interface.joint_state)
+            obs_dict.update({f"{joint}": pos for joint, pos in joint_state["position"].items()})
+## print toegevoegd
+        # print("STATE:", obs_dict["observation.state"])
 
         # Capture images from cameras
         for cam_key, cam in self.cameras.items():
@@ -129,6 +207,12 @@ class Ur(Robot):
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
 
+# ## print toegevoegd
+        # print("=== OBS KEYS ===")
+        # print(obs_dict.keys())
+        # print(obs_dict)       #FUCKED PERFORMANCE
+        # print(joint_state["position"])
+        
         return obs_dict
 
     def reset(self):
@@ -175,9 +259,44 @@ class Ur(Robot):
         }
 
     @property
+    def _motors_ft(self) -> dict[str, type]:
+        return {
+                "shoulder_pan_joint": float,
+                "shoulder_lift_joint": float,
+                "elbow_joint": float,
+                "wrist_1_joint": float,
+                "wrist_2_joint": float,
+                "wrist_3_joint": float,
+                "gripper_joint": float,
+        }
+
+
+    @property
     def observation_features(self) -> dict[str, Any]:
-        features = {**self._cameras_ft}
+        features = {**self._motors_ft, **self._cameras_ft} #**self._motors_ft
         return features
+
+# Zelf toegevoegd
+    # @property
+    # def observation_features(self) -> dict[str, Any]:
+    #     features = {**self._motors_ft, **self._cameras_ft}
+
+    #     features["observation.state"] = {
+    #         "dtype": "float32",
+    #         "shape": (7,),
+    #         "names": [
+    #             "shoulder_pan_joint",
+    #             "shoulder_lift_joint",
+    #             "elbow_joint",
+    #             "wrist_1_joint",
+    #             "wrist_2_joint",
+    #             "wrist_3_joint",
+    #             "gripper",
+    #         ],
+    #     }
+    #     return features
+################################################
+
 
     @property
     def cameras(self):
@@ -195,32 +314,37 @@ class Ur(Robot):
     def config(self, value):
         self._config = value
 
-    @property
-    def action_features(self) -> dict[str, type]:
-        if self.config.ros2_interface.action_type in (ActionType.MOVEGROUP_SERVO_POSE, ActionType.MOVEGROUP_SERVO_TWIST):
-            return {
-                "linear_x.vel": float,
-                "linear_y.vel": float,
-                "linear_z.vel": float,
-                "angular_x.vel": float,
-                "angular_y.vel": float,
-                "angular_z.vel": float,
-                "gripper.pos": float,
-            }
-        elif self.config.ros2_interface.action_type in (ActionType.JOINT_POSITION, ActionType.MOVEGROUP_FOLLOW_JOINT_TRAJECTION, ActionType.MOVEGROUP_SERVO_JOG):
-            return {f"{joint}.pos": float for joint in self.config.ros2_interface.arm_joint_names} | {
-                "gripper.pos": float
-            }
-        else:
-            raise ValueError(f"Unsupported action type: {self.config.ros2_interface.action_type}")
+
+##zelf toegevoegd#########
+    # @property
+    # def action_features(self) -> dict[str, type]:
+    #     if self.config.ros2_interface.action_type in (ActionType.MOVEGROUP_SERVO_POSE, ActionType.MOVEGROUP_SERVO_TWIST):
+    #         return {
+    #             "linear_x.vel": float,
+    #             "linear_y.vel": float,
+    #             "linear_z.vel": float,
+    #             "angular_x.vel": float,
+    #             "angular_y.vel": float,
+    #             "angular_z.vel": float,
+    #             "gripper": float,
+    #         }
+    #     elif self.config.ros2_interface.action_type in (ActionType.JOINT_POSITION, ActionType.MOVEGROUP_FOLLOW_JOINT_TRAJECTION, ActionType.MOVEGROUP_SERVO_JOG):
+    #         return {f"{joint}": float for joint in self.config.ros2_interface.arm_joint_names} | {
+    #             "gripper": float
+    #         }
+    #     else:
+    #         raise ValueError(f"Unsupported action type: {self.config.ros2_interface.action_type}")       
+#########################
+
 
     @property
     def action_features(self) -> dict[str, type]:
         # Provide action features for each arm joint
-        features = {f"{joint}.pos": float for joint in self.config.ros2_interface.arm_joint_names}
+        features = self._motors_ft 
+        # features = {f"{joint}": float for joint in self.config.ros2_interface.arm_joint_names}
         # Optionally add gripper
-        if hasattr(self.config.ros2_interface, "gripper_joint_name"):
-            features[f"{self.config.ros2_interface.gripper_joint_name}.pos"] = float
+        # if hasattr(self.config.ros2_interface, "gripper_joint_name"):  ##gripper_joint_name vervangen door gripper
+        #     features[f"{self.config.ros2_interface.gripper_joint_name}"] = float
         return features
 
     def calibrate(self) -> None:

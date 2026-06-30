@@ -163,20 +163,42 @@ class ROS2Interface:
             # Store as teachbot joint positions
             self._teachbot_joint_positions[joint_name] = msg.position[idx]
         
+        ########################################33
         if self.teachbot_enabled:
             self._last_joint_state["position"] = positions
-            if self.config.use_gripper:
-                if self.config.vacuum_gripper:
-                    if self.teachbot_pot_precent > 50.0:
-                        self._last_joint_state["gripper"] = 100.0
-                    else:
-                        self._last_joint_state["gripper"] = 0.0
-                else:
-                    self._last_joint_state["gripper"] = self.teachbot_pot_precent
         else:
             # When disabled, set position to zeros
             positions = {joint_name: 0.0 for joint_name in self.config.arm_joint_names}
             self._last_joint_state["position"] = positions
+
+        # Always set gripper value regardless of enabled state
+        if self.config.use_gripper:
+            if self.config.vacuum_gripper:
+                if self.teachbot_pot_precent > 50.0:
+                    self._last_joint_state["gripper"] = 100.0
+                else:
+                    self._last_joint_state["gripper"] = 0.0
+            else:
+                # Map potentiometer 0-100 to gripper position 0.0-0.085m (0.085m=open, 0.0m=closed)
+                # Robotiq 2F-85 has max_joint_position of 0.085m
+                gripper_pos = 0.085 - ((self.teachbot_pot_precent / 100.0) * 0.085) +0.03
+                
+                self._last_joint_state["gripper"] = gripper_pos
+        
+        # print(f"[JointState] Setting gripper: pot_percent={self.teachbot_pot_precent} -> position={gripper_pos:.4f}m")
+         ##############################################   
+
+        # if self.teachbot_enabled:
+        #     self._last_joint_state["position"] = positions
+        #     if self.config.use_gripper:
+        #         if self.config.vacuum_gripper:
+        #             if self.teachbot_pot_precent > 50.0:
+        #                 self._last_joint_state["gripper"] = 100.0
+        #             else:
+        #                 self._last_joint_state["gripper"] = 0.0
+        #         else:
+        #             self._last_joint_state["gripper"] = self.teachbot_pot_precent
+
 
 
     def _target_joint_state_callback(self, msg: "JointState") -> None:
@@ -254,6 +276,8 @@ class ROS2Interface:
         self.teachbot_pot_precent = msg.pistol.pot_percent
         self.teachbot_btn1 = msg.pistol.btn1
         self.teachbot_btn2 = msg.pistol.btn2
+        #DEBUG PRINT
+        #print(f"[TeachbotState] pot_percent={self.teachbot_pot_precent}, btn1={self.teachbot_btn1}")
 
         # Toggle teachbot_enabled on btn1 rising edge, only if joint positions are within the configured threshold
         if self.teachbot_btn1 and not self._teachbot_btn1_prev:

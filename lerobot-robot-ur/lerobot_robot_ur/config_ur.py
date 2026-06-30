@@ -30,15 +30,15 @@ class ROS2InterfaceConfig:
         ]
     )
     # Joint name used for the gripper in ROS interfaces and command messages.
-    gripper_joint_name: str = "gripper_joint"
+    gripper_joint_name: str = "gripper_joint"   #was gripper_joint
     # Reference frame used for Cartesian commands (typically the robot base frame).
     base_link: str = "base_link"
     # Maximum commanded linear speed in meters/second for Cartesian servo modes.
-    max_linear_velocity: float = 0.10
+    max_linear_velocity: float = 5      #0.10  5
     # Maximum commanded angular speed in radians/second for Cartesian servo modes.
-    max_angular_velocity: float = 0.25
+    max_angular_velocity: float = 10    #0.25  10
     # Maximum commanded joint speed in radians/second for MoveIt Servo joint jog mode.
-    max_joint_jog_velocity: float = 5.0
+    max_joint_jog_velocity: float = 200    #5.0  200
     # UR5/UR10 joint limits in radians (example: UR5)
     min_joint_positions: list[float] = field(default_factory=lambda: [
         -6.283185307179586,  # shoulder_pan_joint
@@ -117,6 +117,7 @@ class ROS2InterfaceConfig:
     max_joint_positions: list[float] = field(
         default_factory=lambda: [6.283, 2.356, 3.141, 6.283, 6.283, 6.283]
     )
+    robotiq_gripper_controller: str = "/servo_node/robotiq_gripper_controller"
 
 
 @dataclass
